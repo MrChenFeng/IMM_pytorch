@@ -126,20 +126,20 @@ def tps_sample_params(batch_size, num_control_points, var=0.05):
     return theta, cnt_points
 
 
-def tps_transform(x, theta, cnt_points):
+def tps_transform(x, lossmask, theta, cnt_points):
     device = x.device
     grid = tps_grid(theta, cnt_points, x.shape).type_as(x).to(device)
-    return F.grid_sample(x, grid, padding_mode='zeros'), grid
+    return F.grid_sample(x, grid, padding_mode='zeros'), F.grid_sample(lossmask, grid, padding_mode='zeros')
 
 
 class RandomTPSTransform(object):
-    def __init__(self, num_control=4, variance=0.05):
+    def __init__(self, num_control=5, variance=0.05):
         self.num_control = num_control
         self.var = variance
 
-    def __call__(self, x):
+    def __call__(self, x, lossmask):
         theta, cnt_points = tps_sample_params(x.size(0), self.num_control, self.var)
-        return tps_transform(x, theta, cnt_points)
+        return tps_transform(x, lossmask, theta, cnt_points)
 
 
 #
@@ -195,20 +195,35 @@ class RandomTPSTransform(object):
 #         return rotate_affine_grid_multi(x, theta)
 #
 
-if __name__ == '__main__':
-    import matplotlib.pyplot as plt
+class TPS_Twice(object):
+    def __init__(self, num_control=5, variance=0.05):
+        """
 
-    x = torch.randn(10, 3, 128, 128)
-    lossmask = torch.ones(10, 3, 128, 128)
-    trans = RandomTPSTransform(5, 0.05)
-    y, gridy = trans(x)
-    masky = F.grid_sample(lossmask, gridy)
-    trans = RandomTPSTransform(5, 0.05)
-    z, gridz = trans(y)
-    maskz = F.grid_sample(masky, gridz)
-    import matplotlib.pyplot as plt
+        Args:
+            num_control (int): Number of TPS control points
+            variance (float): Variance of TPS transform coefficients
+        """
+        self.transform = RandomTPSTransform(num_control, variance)
 
-    plt.imshow(masky[0].permute(1, 2, 0))
-    plt.show()
-    plt.imshow(maskz[0].permute(1, 2, 0))
-    plt.show()
+    def __call__(self, x):
+        mask = torch.ones(x.shape)
+        x1, mask1 = self.transform(x, mask)
+        x2, mask2 = self.transform(y, mask1)
+        return x1, mask1, x2, mask2
+
+
+# if __name__ == '__main__':
+#     import matplotlib.pyplot as plt
+#
+#     x = torch.randn(10, 3, 128, 128)
+#     lossmask = torch.ones(10, 3, 128, 128)
+#     trans = RandomTPSTransform()
+#     y, masky = trans(x, lossmask)
+#     trans = RandomTPSTransform()
+#     z, maskz = trans(y, masky)
+#     import matplotlib.pyplot as plt
+#
+#     plt.imshow(masky[1].permute(1, 2, 0))
+#     plt.show()
+#     plt.imshow(maskz[1].permute(1, 2, 0))
+#     plt.show()

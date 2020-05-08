@@ -1,28 +1,26 @@
 import os
 from torch.utils.data import Dataset
 import pandas as pd
-from PIL import Image, ImageFile
+from PIL import Image
 import numpy as np
 
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-import torch.nn as nn
 
 class AFLW(Dataset):
     """
     AFLW
     """
 
-    def __init__(self, dataroot='/home/lab/datasets/AFLW', is_train=True, transform=None):
+    def __init__(self, data_root='/home/chen/Datasets/Faces and human pose/AFLW/aflw/data', is_train=True,
+                 transform=None):
         # specify annotation file for dataset
         if is_train:
-            self.csv_file = '/home/chen/General_Datasets/Face-annotations/data/aflw/face_landmarks_aflw_train.csv'
+            self.csv_file = data_root + '/face_landmarks_aflw_train.csv'
         else:
-            self.csv_file = '/home/chen/General_Datasets/Face-annotations/data/aflw/face_landmarks_aflw_test.csv'
+            self.csv_file = data_root + '/face_landmarks_aflw_test.csv'
 
         self.is_train = is_train
         self.transform = transform
-        self.data_root = dataroot
+        self.data_root = data_root
         # load annotations
         self.landmarks_frame = pd.read_csv(self.csv_file)
 
@@ -41,26 +39,17 @@ class AFLW(Dataset):
         pts = self.landmarks_frame.iloc[idx, 5:].values
         pts = pts.astype("float").reshape(-1, 2)
 
-        img = Image.open(image_path).convert("RGB")
+        image = Image.open(image_path).convert("RGB")
 
         top = center_h - box_size / 2.0
         bottom = center_h + box_size / 2.0
         left = center_w - box_size / 2.0
         right = center_w + box_size / 2.0
-        img = img.crop([left, top, right, bottom])
-        landmarks = pts - [left, top]
-        sample = {'image': img, 'landmarks': landmarks}
+        image = image.crop([left, top, right, bottom])
+        label = pts - [left, top]
+        sample = {'image': image, 'label': label}
         if self.transform is not None:
             sample = self.transform(sample)
-        # meta = {
-        #     "index": idx,
-        #     "center": center,
-        #     "rescale": scale,
-        #     "pts": torch.Tensor(pts),
-        #     # "tpts": tpts,
-        #     "bbox": bbox,
-        # }
-
         return sample
 
 
@@ -68,14 +57,17 @@ if __name__ == '__main__':
     from transformers import Rescale, Normalize, ToTensor
     from torchvision.transforms import Compose
 
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-    t = AFLW(transform=Compose([Rescale((224, 224)), ToTensor(), Normalize(mean, std)]))
-    tmp = t[1000]
+    # mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+    # std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+    t = AFLW(transform=Compose(
+        [Rescale((224, 224), is_labeled=True), ToTensor(is_labeled=True)]))  # , Normalize(mean, std,is_labeled=True)]))
+    from torch.utils.data import DataLoader
+    data = DataLoader(t, 10)
     import matplotlib.pyplot as plt
 
+    tmp = next(iter(data))
     img = tmp['image']
-    landmark = tmp['landmarks']
+    landmark = tmp['label']
 
 
     def display(image, label):
@@ -86,4 +78,9 @@ if __name__ == '__main__':
         # plt.scatter(bbox[:, 0], bbox[:, 1], c='r', marker='o')
         plt.show()
 
-    display(img, landmark)
+
+    from utils import gaussian_like_function
+
+    t = gaussian_like_function(landmark, 224, 224)
+    display(img[0], landmark[0]*224)
+    display(t[0][0],landmark[0]*224)
