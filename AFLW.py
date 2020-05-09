@@ -1,10 +1,10 @@
 import os
 from torch.utils.data import Dataset
 import pandas as pd
-from PIL import Image
+from PIL import Image, ImageFile
 import numpy as np
 
-
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 class AFLW(Dataset):
     """
     AFLW

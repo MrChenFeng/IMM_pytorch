@@ -60,7 +60,10 @@ def config(args=None):
         'heatmap_std': 0.1,
         'tps_variance': 0.01,
         'data_rescale_height': 128,
-        'data_rescale_width': 128
+        'data_rescale_width': 128,
+        'split': 'random',
+        'trainratio': 0.8,
+        'testratio': 0.2
     }
 
     args = set_if_not_set(args, defaults)

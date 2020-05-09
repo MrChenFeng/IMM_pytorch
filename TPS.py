@@ -206,9 +206,9 @@ class TPS_Twice(object):
         self.transform = RandomTPSTransform(num_control, variance)
 
     def __call__(self, x):
-        mask = torch.ones(x.shape)
+        mask = torch.ones(x.shape).to(x.device)
         x1, mask1 = self.transform(x, mask)
-        x2, mask2 = self.transform(y, mask1)
+        x2, mask2 = self.transform(x1, mask1)
         return x1, mask1, x2, mask2
 
 
