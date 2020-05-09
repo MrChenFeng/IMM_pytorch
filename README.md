@@ -3,6 +3,7 @@ Pytorch implementation of "Unsupervised Learning of Object Landmarks through Con
 
 ## Usage
 `python train.py -c configs/Configs.yaml [-epochs 10 --data_root ./images]`
+
 Parameters can be set in yaml or one by one. To check all configurable params:
 `python train.py -h`
 
