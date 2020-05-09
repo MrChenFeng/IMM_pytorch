@@ -15,7 +15,7 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 # Running Settings%
@@ -37,13 +37,13 @@ class Trainer(object):
 
         if self.config.split == 'listed':
             self._load_list_split()
-        else:
+        elif self.config.split == 'random':
             self._load_random_split()
 
         self._load_model()
         self._init_TPS()
         self.metric = l2_reconstruction_loss
-        self.eval_loss = 0
+        self.eval_loss = float("inf")
 
     def _load_list_split(self):
         train_set = self.dataset(is_train=True, transform=Compose(
@@ -73,12 +73,13 @@ class Trainer(object):
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=0.2, patience=10, verbose=True)
 
     def _init_TPS(self):
-        self.tps_transform = TPS_Twice(self.config.tps_control_pts, self.config.tps_variance)
+        self.tps_transform = TPS_Twice(self.config.tps_control_pts, self.config.tps_variance, self.config.max_rot)
 
-    def train(self):
+    def train(self, epoch):
         cur_loss = 0
         self.model.train()
-        batch = tqdm(self.train_loader, total=len(self.train_loader), ascii=True)
+        print(f'------------------------Epoch {epoch + 1} started!-----------------------')
+        batch = tqdm(self.train_loader, total=len(self.train_loader), position=0, leave=True, ascii=True)
         for i, sample in enumerate(batch):
             self.optimizer.zero_grad()
             image = sample['image'].to(self.config.device)  # BxCxHxW
@@ -91,10 +92,10 @@ class Trainer(object):
             self.optimizer.step()
         self.scheduler.step(cur_loss)
 
-    def eval(self):
+    def eval(self, epoch):
         cur_loss = 0
         self.model.eval()
-        batch = tqdm(self.test_loader, total=len(self.test_loader), ascii=True)
+        batch = tqdm(self.test_loader, total=len(self.test_loader), position=0, leave=True, ascii=True)
         for i, sample in enumerate(batch):
             image = sample['image'].to(self.config.device)  # BxCxHxW
             x1, _, x2, loss_mask = self.tps_transform(image)
@@ -102,8 +103,10 @@ class Trainer(object):
             loss = self.metric(x2, recovered_x2, loss_mask)
             batch.set_description(f'Iters: {i + 1} Eval Loss: {loss.item()}')
             cur_loss += float(loss)
+        print(f'--- Minimum Loss: {self.eval_loss} --- Epoch {epoch + 1} Loss: {cur_loss} ---')
         if self.eval_loss > cur_loss:
-            torch.save(self.model.state_dict(f'model_{self.config.dataset}.pt'))
+            self.eval_loss = cur_loss
+            torch.save(self.model.state_dict(), f'model_{self.config.dataset}.pt')
 
 
 if __name__ == '__main__':
@@ -111,7 +114,6 @@ if __name__ == '__main__':
     trainer = Trainer(configs)
     # print(len(trainer.test_loader))
     for j in range(configs.epochs):
-        print(f'-------------------------Epoch {j + 1} started!------------------------')
-        trainer.train()
-        trainer.eval()
-        print(f'-------------------------Epoch {j + 1} ended!------------------------')
+        trainer.train(j)
+        trainer.eval(j)
+

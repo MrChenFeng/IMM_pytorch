@@ -1,13 +1,15 @@
 num_keypoints: 10
 batch_size: 50
 dataset: 'CelebA'
-tps_control_pts: 5
+tps_control_pts: 10
 lr: 0.01
-epochs: 20
+epochs: 100
 heatmap_std: 0.1
-tps_variance: 0.01
+tps_variance: 0.05
+max_rot: 0.1
 data_rescale_height: 128
 data_rescale_width: 128
 split: 'random'
 trainratio: 0.8
 testratio: 0.2
+

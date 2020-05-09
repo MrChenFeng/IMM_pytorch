@@ -126,104 +126,91 @@ def tps_sample_params(batch_size, num_control_points, var=0.05):
     return theta, cnt_points
 
 
-def tps_transform(x, lossmask, theta, cnt_points):
+def tps_transform(x, theta, cnt_points):
     device = x.device
     grid = tps_grid(theta, cnt_points, x.shape).type_as(x).to(device)
-    return F.grid_sample(x, grid, padding_mode='zeros'), F.grid_sample(lossmask, grid, padding_mode='zeros')
+    return F.grid_sample(x, grid, padding_mode='zeros')
 
 
-class RandomTPSTransform(object):
-    def __init__(self, num_control=5, variance=0.05):
-        self.num_control = num_control
-        self.var = variance
+# class RandomTPSTransform(object):
+#     def __init__(self, num_control=5, variance=0.05):
+#         self.num_control = num_control
+#         self.var = variance
+#
+#     def __call__(self, x, lossmask):
+#         theta, cnt_points = tps_sample_params(x.size(0), self.num_control, self.var)
+#         return tps_transform(x, lossmask, theta, cnt_points)
 
-    def __call__(self, x, lossmask):
-        theta, cnt_points = tps_sample_params(x.size(0), self.num_control, self.var)
-        return tps_transform(x, lossmask, theta, cnt_points)
+def rotate_affine_grid_multi(x, theta):
+    theta = theta.to(x.device)
+    cos_theta = torch.cos(theta)
+    sin_theta = torch.sin(theta)
+
+    transform = torch.zeros(x.size(0), 2, 3, dtype=x.dtype)
+    transform[:, 0, 0] = cos_theta
+    transform[:, 0, 1] = sin_theta
+    transform[:, 1, 0] = - sin_theta
+    transform[:, 1, 1] = cos_theta
+
+    grid = F.affine_grid(transform, x.shape).to(x.device)
+    return F.grid_sample(x, grid, padding_mode='zeros', align_corners=False)
 
 
-#
-# def rotate_affine_grid(x, theta):
-#     theta = torch.tensor([
-#         [cos(theta), sin(theta), 0.0],
-#         [-sin(theta), cos(theta), 0.0]
-#     ]).expand(x.size(0), -1, -1).to(x.device)
-#
-#     grid = F.affine_grid(theta, x.shape)
-#     return F.grid_sample(x, grid, padding_mode='zeros')
-#
-#
-# def rotate_affine_grid_multi(x, theta):
-#     theta = theta.to(x.device)
-#     cos_theta = torch.cos(theta)
-#     sin_theta = torch.sin(theta)
-#
-#     transform = torch.zeros(x.size(0), 2, 3, dtype=x.dtype)
-#     transform[:, 0, 0] = cos_theta
-#     transform[:, 0, 1] = sin_theta
-#     transform[:, 1, 0] = - sin_theta
-#     transform[:, 1, 1] = cos_theta
-#
-#     grid = F.affine_grid(transform, x.shape).to(x.device)
-#     return F.grid_sample(x, grid, padding_mode='zeros', align_corners=False)
-#
-#
-# class Rotate(object):
-#     def __init__(self, theta=0.2):
-#         self.theta = theta
-#
-#     def __call__(self, x):
-#         return rotate_affine_grid(x, self.theta)
-#
-#
-# class RotateMulti(object):
-#     def __init__(self, theta=0.2):
-#         self.theta = theta
-#
-#     def __call__(self, x):
-#         theta = torch.full((x.size(0),), self.theta, device=x.device)
-#         return rotate_affine_grid_multi(x, theta)
-#
-#
-# class RandRotate(object):
-#     def __init__(self, max=0.2):
-#         self.max = max
-#
-#     def __call__(self, x):
-#         theta = torch.rand(x.size(0)) * 2 - 1
-#         theta = theta * self.max
-#         return rotate_affine_grid_multi(x, theta)
-#
+def rand_peturb_params(batch_items, tps_cntl_pts, tps_variance, max_rotate):
+    theta_tps, cntl_pts = tps_sample_params(batch_items, tps_cntl_pts, tps_variance)
+    theta_rotate = torch.rand(batch_items) * 2 - 1
+    theta_rotate = theta_rotate * max_rotate
+    return theta_tps, cntl_pts, theta_rotate
+
+
+def peturb(x, tps_theta, cntl_pts, theta_rotate):
+    x = tps_transform(x, tps_theta, cntl_pts)
+    x = rotate_affine_grid_multi(x, theta_rotate)
+    return x
+
+
+def nop(*data):
+    return data[0], data[1], None
+
 
 class TPS_Twice(object):
-    def __init__(self, num_control=5, variance=0.05):
+    def __init__(self, num_control=5, tps_variance=0.05, rotate_variance=0.1):
         """
 
         Args:
             num_control (int): Number of TPS control points
             variance (float): Variance of TPS transform coefficients
         """
-        self.transform = RandomTPSTransform(num_control, variance)
+        self.tps_cntl_pts = num_control
+        self.tps_variance = tps_variance
+        self.max_rotate = rotate_variance
 
-    def __call__(self, x):
-        mask = torch.ones(x.shape).to(x.device)
-        x1, mask1 = self.transform(x, mask)
-        x2, mask2 = self.transform(x1, mask1)
+    def __call__(self, *data):
+        x = data[0]
+        loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
+        bsize = x.size(0)
+        theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize, self.tps_cntl_pts, self.tps_variance,
+                                                               self.max_rotate)
+        x1 = peturb(x, theta_tps, cntl_pts, theta_rotate)
+        mask1 = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
+
+        theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize, self.tps_cntl_pts, self.tps_variance,
+                                                               self.max_rotate)
+        x2 = peturb(x, theta_tps, cntl_pts, theta_rotate)
+        mask2 = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
         return x1, mask1, x2, mask2
 
 
-# if __name__ == '__main__':
-#     import matplotlib.pyplot as plt
-#
-#     x = torch.randn(10, 3, 128, 128)
-#     lossmask = torch.ones(10, 3, 128, 128)
-#     trans = RandomTPSTransform()
-#     y, masky = trans(x, lossmask)
-#     trans = RandomTPSTransform()
-#     z, maskz = trans(y, masky)
-#     import matplotlib.pyplot as plt
-#
-#     plt.imshow(masky[1].permute(1, 2, 0))
-#     plt.show()
-#     plt.imshow(maskz[1].permute(1, 2, 0))
-#     plt.show()
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+
+    x = torch.randn(10, 3, 128, 128)
+    lossmask = torch.ones(10, 3, 128, 128)
+    trans = TPS_Twice()
+    x1, m1, x2, m2 = trans(x, lossmask)
+    import matplotlib.pyplot as plt
+
+    plt.imshow(x1[1].permute(1, 2, 0))
+    plt.show()
+    plt.imshow(x2[1].permute(1, 2, 0))
+    plt.show()

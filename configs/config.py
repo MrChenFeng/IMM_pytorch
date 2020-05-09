@@ -63,7 +63,8 @@ def config(args=None):
         'data_rescale_width': 128,
         'split': 'random',
         'trainratio': 0.8,
-        'testratio': 0.2
+        'testratio': 0.2,
+        'max_rot':0.1
     }
 
     args = set_if_not_set(args, defaults)
