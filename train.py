@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-from aflw import AFLW
-from celeba import CelebA
-from transformers import Rescale, ToTensor
+from datasets import AFLW
+from datasets import CelebA
+from utils.transformers import Rescale, ToTensor
 from torchvision.transforms import Compose
 import torch
 from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 from IMMmodel import IMM
-from config import config
-from tps import TPS_Twice
+from configs.config import config
+from utils.tps import TPS_Twice
 from tqdm import tqdm
 import warnings
 

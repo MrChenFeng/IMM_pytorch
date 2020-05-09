@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset, Subset
-from os.path import join, exists, isdir
+from os.path import join
 from PIL import Image
 import os
 import numpy as np
@@ -53,7 +53,7 @@ class CelebA(object):
 
 
 if __name__ == '__main__':
-    from transformers import Rescale, ToTensor
+    from utils.transformers import Rescale, ToTensor
     from torchvision.transforms import Compose
 
     celeba_dataset = CelebA(Compose([Rescale([128, 128]), ToTensor()]))

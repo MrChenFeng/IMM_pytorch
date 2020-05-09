@@ -53,7 +53,7 @@ def config(args=None):
     defaults = {
         'num_keypoints': 10,
         'batch_size': 100,
-        'dataset': 'AFLW',
+        'dataset': 'CelebA',
         'tps_control_pts': 5,
         'lr': 0.01,
         'epochs': 20,

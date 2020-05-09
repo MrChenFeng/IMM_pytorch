@@ -2,7 +2,6 @@ import os
 from torch.utils.data import Dataset
 import pandas as pd
 from PIL import Image, ImageFile
-import numpy as np
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 class AFLW(Dataset):
@@ -54,7 +53,7 @@ class AFLW(Dataset):
 
 
 if __name__ == '__main__':
-    from transformers import Rescale, Normalize, ToTensor
+    from utils.transformers import Rescale, ToTensor
     from torchvision.transforms import Compose
 
     # mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
