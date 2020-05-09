@@ -4,7 +4,7 @@ import torch
 
 
 class IMM(nn.Module):
-    def __init__(self, dim=10):
+    def __init__(self, dim=10, heatmap_std=0.1):
         """
         It should be noted all params has been fixed to Jakab 2018 paper.
         Goto the original class if params and layers need to be changed.
@@ -12,7 +12,7 @@ class IMM(nn.Module):
         """
         super(IMM, self).__init__()
         self.content_encoder = Encoder()
-        self.pose_encoder = PoseEncoder(dim)
+        self.pose_encoder = PoseEncoder(dim, heatmap_std)
         self.generator = Generator()
 
     def forward(self, x, y):
@@ -64,7 +64,7 @@ class Encoder(nn.Module):
 
 
 class PoseEncoder(Encoder):
-    def __init__(self, dim=10):
+    def __init__(self, dim=10, heatmap_std=0.1):
         """
 
         Args:
@@ -75,7 +75,7 @@ class PoseEncoder(Encoder):
         dim1 = 256
         dim2 = 16
         self.final_conv = nn.Conv2d(dim1, dim, (1, 1), 1, (0, 0))
-        self.heatmap = HeatMap(0.1, (dim2, dim2))
+        self.heatmap = HeatMap(heatmap_std, (dim2, dim2))
 
     def forward(self, x):
         for layer in self.conv_layers:
@@ -161,9 +161,7 @@ class HeatMap(nn.Module):
         # self.in_h, self.in_w = x.shape[h_axis:]
         batch, channel = x.shape[:h_axis]
 
-        # Calculate weighted position of joint(-1~1)
-        # h_scale = self.in_h / float(self.out_h)
-        # w_scale = self.in_w / float(self.out_w)
+        # Calculate weighted position of joint(0~1)
         h_mean = get_gaussian_mean(x, h_axis, w_axis)  # BxC
         w_mean = get_gaussian_mean(x, w_axis, h_axis)  # BxC
 
@@ -172,18 +170,14 @@ class HeatMap(nn.Module):
         h_mean = h_mean.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.out_h, self.out_w)
         w_mean = w_mean.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.out_h, self.out_w)
 
-        h_ind = torch.tensor(torch.linspace(-1, 1, self.out_h)).unsqueeze(-1).repeat(batch, channel, 1, self.out_w).to(
+        h_ind = torch.tensor(torch.linspace(0, 1, self.out_h)).unsqueeze(-1).repeat(batch, channel, 1, self.out_w).to(
             x.device)
-        w_ind = torch.tensor(torch.linspace(-1, 1, self.out_w)).unsqueeze(0).repeat(batch, channel, self.out_h, 1).to(
+        w_ind = torch.tensor(torch.linspace(0, 1, self.out_w)).unsqueeze(0).repeat(batch, channel, self.out_h, 1).to(
             x.device)
         dist = (h_ind - h_mean) ** 2 + (w_ind - w_mean) ** 2
 
-        # div = dist.sum(dim=[2, 3], keepdim=True).repeat(1, 1, self.out_h, self.out_w)
-        # dist = dist * self.out_w * self.out_h / div
-
-        # torch.normal()
         res = torch.exp(-dist / self.std ** 2)
-        return res , coord
+        return res, coord
 
 
 if __name__ == '__main__':
@@ -192,6 +186,8 @@ if __name__ == '__main__':
     # x: the original image
     y = torch.randn(10, 3, 128, 128)
     # y: the warped image
-    from torchsummary import summary
 
-    summary(t, (x, y))
+    import matplotlib.pyplot as plt
+
+    plt.imshow(t.pose_encoder(x)[0][0][0].detach().numpy())
+    plt.show()
