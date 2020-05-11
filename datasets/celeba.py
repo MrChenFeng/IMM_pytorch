@@ -1,14 +1,15 @@
-from torch.utils.data import Dataset, Subset
-from os.path import join
-from PIL import Image
 import os
+from os.path import join
+
 import numpy as np
+from PIL import Image
+from torch.utils.data import Dataset, Subset
 
 
 class Base(Dataset):
     """CelebA dataset."""
 
-    def __init__(self, root_dir='/home/lab/datasets/CelebA/Img/img_faces_celeba', transform=None):
+    def __init__(self, root_dir='/home/lab/datasets/CelebA/Img/img_align_celeba', transform=None):
         """
         Args:
             root_dir (string):       Directory with all the images.
@@ -17,7 +18,7 @@ class Base(Dataset):
                                      on a sample.
         """
         self.root_dir = root_dir
-        self.filelist = os.listdir(self.root_dir)
+        self.filelist = sorted(os.listdir(self.root_dir))
         self.transform = transform
 
     def __len__(self):
@@ -42,8 +43,9 @@ class CelebA(object):
 
     def __call__(self, trainlen, testlen=None):
         imagelist = self.dataset.filelist
-        np.random.seed(1)
-        ind = np.random.permutation(len(imagelist))
+        # np.random.seed(1)
+        # ind = np.random.permutation(len(imagelist))
+        ind = np.arange(len(imagelist))
         trainset = Subset(self.dataset, ind[:trainlen])
         if testlen == None:
             testset = Subset(self.dataset, ind[trainlen:])

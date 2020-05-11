@@ -1,13 +1,14 @@
-from datasets import AFLW
-from datasets import CelebA
-from utils.transformers import Rescale, ToTensor
-from torchvision.transforms import Compose
-from torch.utils.data import DataLoader
-from IMMmodel import IMM
 import warnings
+
 import matplotlib.pyplot as plt
-from utils.tps import TPS_Twice
 import torch
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose
+
+from IMMmodel import IMM
+from datasets import CelebA
+from utils.tps import TPS_Twice
+from utils.transformers import Rescale, ToTensor
 
 warnings.filterwarnings("ignore", category=UserWarning)
 import os
@@ -16,12 +17,13 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 if __name__ == '__main__':
     model = IMM(dim=10, heatmap_std=0.1)
-    model.load_state_dict(torch.load('model_AFLW.pt'))
+    model.load_state_dict(torch.load('experiment1/model_CelebA.pt'))
     model.eval()
 
-    data_set = AFLW(is_train=True, transform=Compose(
+    data_set = CelebA(transform=Compose(
         [Rescale([128, 128]), ToTensor()]))
-    data_loader = DataLoader(dataset=data_set, batch_size=10, drop_last=True,
+    trainset, testset = data_set(100000, 10000)
+    data_loader = DataLoader(dataset=trainset, batch_size=10, drop_last=True,
                              shuffle=True)
 
     sample = next(iter(data_loader))
@@ -44,6 +46,7 @@ if __name__ == '__main__':
         if loss_mask is not None:
             loss = loss * loss_mask
         return torch.mean(loss)
+
 
     l2_reconstruction_loss(x2, recovered_x2, mask2)
     pose, cord = model.pose_encoder(image)

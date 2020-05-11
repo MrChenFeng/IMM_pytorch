@@ -5,7 +5,6 @@
 
 import torch
 import torch.nn.functional as F
-from math import sin, cos
 
 
 def tps(theta, ctrl, grid):
@@ -185,8 +184,7 @@ class TPS_Twice(object):
         self.tps_variance = tps_variance
         self.max_rotate = rotate_variance
 
-    def __call__(self, *data):
-        x = data[0]
+    def __call__(self, x):
         loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
         bsize = x.size(0)
         theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize, self.tps_cntl_pts, self.tps_variance,
@@ -196,8 +194,8 @@ class TPS_Twice(object):
 
         theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize, self.tps_cntl_pts, self.tps_variance,
                                                                self.max_rotate)
-        x2 = peturb(x, theta_tps, cntl_pts, theta_rotate)
-        mask2 = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
+        x2 = peturb(x1, theta_tps, cntl_pts, theta_rotate)
+        mask2 = peturb(mask1, theta_tps, cntl_pts, theta_rotate)
         return x1, mask1, x2, mask2
 
 
@@ -207,10 +205,10 @@ if __name__ == '__main__':
     x = torch.randn(10, 3, 128, 128)
     lossmask = torch.ones(10, 3, 128, 128)
     trans = TPS_Twice()
-    x1, m1, x2, m2 = trans(x, lossmask)
+    x1, m1, x2, m2 = trans(x)
     import matplotlib.pyplot as plt
 
-    plt.imshow(x1[1].permute(1, 2, 0))
+    plt.imshow(m1[1].permute(1, 2, 0))
     plt.show()
-    plt.imshow(x2[1].permute(1, 2, 0))
+    plt.imshow(m2[1].permute(1, 2, 0))
     plt.show()

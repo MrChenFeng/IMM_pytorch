@@ -1,7 +1,8 @@
-import yaml
 import argparse
 from pathlib import Path
+
 import torch
+import yaml
 
 
 def config(args=None):
@@ -17,11 +18,13 @@ def config(args=None):
     parser.add_argument('-c', '--config', type=str, default=None)
     parser.add_argument('-d', '--device', type=str)
     parser.add_argument('--epochs', type=int)
-    #parser.add_argument('--data_root', type=str, default='data')
+    parser.add_argument('--run_id', type=str)
+    # parser.add_argument('--data_root', type=str, default='data')
 
     """ model parameters """
     parser.add_argument('--heatmap_std', type=int)
     parser.add_argument('--num_keypoints', type=int)
+    parser.add_argument('--pretrained', type=str)
 
     """ hyper-parameters """
     parser.add_argument('--optimizer', type=str, default='Adam')
@@ -64,7 +67,7 @@ def config(args=None):
         'split': 'random',
         'trainratio': 0.8,
         'testratio': 0.2,
-        'max_rot':0.1
+        'max_rot': 0.1
     }
 
     args = set_if_not_set(args, defaults)
@@ -80,5 +83,5 @@ def config(args=None):
 if __name__ == '__main__':
     t = config()
     from train import Trainer
-    test = Trainer(t)
 
+    test = Trainer(t)
