@@ -5,16 +5,16 @@ from utils import get_gaussian_mean
 
 
 class IMM(nn.Module):
-    def __init__(self, dim=10, heatmap_std=0.1):
+    def __init__(self, dim=10, heatmap_std=0.1, h_channel=64):
         """
         It should be noted all params has been fixed to Jakab 2018 paper.
         Goto the original class if params and layers need to be changed.
         Images should be rescaled to 128*128
         """
         super(IMM, self).__init__()
-        self.content_encoder = Encoder()
-        self.pose_encoder = PoseEncoder(dim, heatmap_std)
-        self.generator = Generator()
+        self.content_encoder = Encoder(h_channel)
+        self.pose_encoder = PoseEncoder(dim, heatmap_std,h_channel)
+        self.generator = Generator(h_channel=h_channel)
         self._initialize_weights()
 
     def _initialize_weights(self):
@@ -39,21 +39,21 @@ class IMM(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self):
+    def __init__(self, h_channel=64):
         super(Encoder, self).__init__()
-        self.conv1_1 = self._gen_conv_block(3, 32, (7, 7), 1, (3, 3))
-        self.conv1_2 = self._gen_conv_block(32, 32, (3, 3), 1, (1, 1))
+        self.conv1_1 = self._gen_conv_block(3, h_channel, (7, 7), 1, (3, 3))
+        self.conv1_2 = self._gen_conv_block(h_channel, h_channel, (3, 3), 1, (1, 1))
 
-        self.conv2_1 = self._gen_conv_block(32, 64, (3, 3), 2, (1, 1))
-        self.conv2_2 = self._gen_conv_block(64, 64, (3, 3), 1, (1, 1))
+        self.conv2_1 = self._gen_conv_block(h_channel, 2 * h_channel, (3, 3), 2, (1, 1))
+        self.conv2_2 = self._gen_conv_block(2 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
 
-        self.conv3_1 = self._gen_conv_block(64, 128, (3, 3), 2, (1, 1))
-        self.conv3_2 = self._gen_conv_block(128, 128, (3, 3), 1, (1, 1))
+        self.conv3_1 = self._gen_conv_block(2 * h_channel, 4 * h_channel, (3, 3), 2, (1, 1))
+        self.conv3_2 = self._gen_conv_block(4 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
 
-        self.conv4_1 = self._gen_conv_block(128, 256, (3, 3), 2, (1, 1))
-        self.conv4_2 = self._gen_conv_block(256, 256, (3, 3), 1, (1, 1))
+        self.conv4_1 = self._gen_conv_block(4 * h_channel, 8 * h_channel, (3, 3), 2, (1, 1))
+        self.conv4_2 = self._gen_conv_block(8 * h_channel, 8 * h_channel, (3, 3), 1, (1, 1))
 
-        self.out_conv = self._gen_conv_block(256, 64, (3, 3), 1, (1, 1))
+        self.out_conv = self._gen_conv_block(8 * h_channel, h_channel, (3, 3), 1, (1, 1))
         self.conv_layers = nn.ModuleList([
             self.conv1_1,
             self.conv1_2,
@@ -81,18 +81,15 @@ class Encoder(nn.Module):
 
 
 class PoseEncoder(Encoder):
-    def __init__(self, dim=10, heatmap_std=0.1):
+    def __init__(self, dim=10, heatmap_std=0.1, h_channel=64, heatmap_size=16):
         """
 
         Args:
             dim (int): Num of keypoints
         """
-        super(PoseEncoder, self).__init__()
-        # It should be noted dim1 and dim2 should be consistent with Encoder
-        dim1 = 64
-        dim2 = 16
-        self.final_conv = nn.Conv2d(64, dim, (3, 3), 1, (1, 1))
-        self.heatmap = HeatMap(heatmap_std, (16, 16))
+        super(PoseEncoder, self).__init__(h_channel)
+        self.final_conv = nn.Conv2d(h_channel, dim, (3, 3), 1, (1, 1))
+        self.heatmap = HeatMap(heatmap_std, (heatmap_size, heatmap_size))
 
     def forward(self, x):
         for layer in self.conv_layers:
@@ -105,27 +102,27 @@ class PoseEncoder(Encoder):
 class Generator(nn.Module):
     """"""
 
-    def __init__(self, map_size=[16, 16], channels=64 + 10):
+    def __init__(self, map_size=[16, 16], channels=64 + 10, h_channel=64):
         super(Generator, self).__init__()
-        self.conv1_1 = self._gen_conv_block(channels, 128, (3, 3), 1, (1, 1))
-        self.conv1_2 = self._gen_conv_block(128, 128, (3, 3), 1, (1, 1))
+        self.conv1_1 = self._gen_conv_block(channels, 8 * h_channel, (3, 3), 1, (1, 1))
+        self.conv1_2 = self._gen_conv_block(8 * h_channel, 8 * h_channel, (3, 3), 1, (1, 1))
 
         map_size = [2 * s for s in map_size]
         self.upsample1 = nn.Upsample(map_size)
-        self.conv2_1 = self._gen_conv_block(128, 64, (3, 3), 1, (1, 1))
-        self.conv2_2 = self._gen_conv_block(64, 64, (3, 3), 1, (1, 1))
+        self.conv2_1 = self._gen_conv_block(8 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
+        self.conv2_2 = self._gen_conv_block(4 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
 
         map_size = [2 * s for s in map_size]
         self.upsample2 = nn.Upsample(map_size)
-        self.conv3_1 = self._gen_conv_block(64, 32, (3, 3), 1, (1, 1))
-        self.conv3_2 = self._gen_conv_block(32, 32, (3, 3), 1, (1, 1))
+        self.conv3_1 = self._gen_conv_block(4 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
+        self.conv3_2 = self._gen_conv_block(2 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
 
         map_size = [2 * s for s in map_size]
         self.upsample3 = nn.Upsample(map_size)
-        self.conv4_1 = self._gen_conv_block(32, 32, (3, 3), 1, (1, 1))
-        self.conv4_2 = self._gen_conv_block(32, 32, (3, 3), 1, (1, 1))
+        self.conv4_1 = self._gen_conv_block(2 * h_channel, h_channel, (3, 3), 1, (1, 1))
+        self.conv4_2 = self._gen_conv_block(h_channel, h_channel, (3, 3), 1, (1, 1))
 
-        self.final_conv = nn.Conv2d(32, 3, (3, 3), 1, (1, 1))
+        self.final_conv = nn.Conv2d(h_channel, 3, (3, 3), 1, (1, 1))
         self.conv_layers = nn.ModuleList([
             self.conv1_1,
             self.conv1_2,
@@ -144,8 +141,8 @@ class Generator(nn.Module):
     def forward(self, x):
         for layer in self.conv_layers:
             x = layer(x)
-        #return x
-        return (nn.functional.tanh(x)+1)/2.0
+        # return x
+        return nn.functional.leaky_relu(x)  # + 1) / 2.0
 
     @staticmethod
     def _gen_conv_block(inc, outc, size, stride, padding):
@@ -180,19 +177,20 @@ class HeatMap(nn.Module):
         batch, channel = x.shape[:h_axis]
 
         # Calculate weighted position of joint(0~1)
-        h_mean = get_gaussian_mean(x, h_axis, w_axis)  # BxC
-        w_mean = get_gaussian_mean(x, w_axis, h_axis)  # BxC
+        x_mean = get_gaussian_mean(x, h_axis, w_axis)  # BxC
+        y_mean = get_gaussian_mean(x, w_axis, h_axis)  # BxC
 
-        coord = torch.stack([h_mean, w_mean], dim=2)
+        coord = torch.stack([y_mean, x_mean], dim=2)
 
-        h_mean = h_mean.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.out_h, self.out_w)
-        w_mean = w_mean.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.out_h, self.out_w)
+        x_mean = x_mean.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.out_h, self.out_w)
+        y_mean = y_mean.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.out_h, self.out_w)
 
-        h_ind = torch.tensor(torch.linspace(0, 1, self.out_h)).unsqueeze(-1).repeat(batch, channel, 1, self.out_w).to(
+        x_ind = torch.tensor(torch.linspace(0, 1, self.out_h)).unsqueeze(-1).repeat(batch, channel, 1, self.out_w).to(
             x.device)
-        w_ind = torch.tensor(torch.linspace(0, 1, self.out_w)).unsqueeze(0).repeat(batch, channel, self.out_h, 1).to(
+        y_ind = torch.tensor(torch.linspace(0, 1, self.out_w)).unsqueeze(0).repeat(batch, channel, self.out_h, 1).to(
             x.device)
-        dist = (h_ind - h_mean) ** 2 + (w_ind - w_mean) ** 2
+
+        dist = (x_ind - x_mean) ** 2 + (y_ind - y_mean) ** 2
 
         res = torch.exp(-(dist + 1e-6).sqrt_() / 2 * self.std ** 2)
         return res, coord
@@ -205,5 +203,4 @@ if __name__ == '__main__':
     y = torch.randn(10, 3, 128, 128)
     # y: the warped image
 
-    tmp = t(x,y)
-
+    tmp = t(x, y)

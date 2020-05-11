@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-# from apex import amp
 import statistics as stats
 import warnings
 
 import torch
+from apex import amp
 from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -82,7 +82,7 @@ class Trainer(object):
             self.model.load_state_dict(torch.load(self.config.pretrained))
         self.optimizer = Adam([{'params': self.model.parameters(), 'lr': self.config.lr}])  # , {'params': hmap.parameters()},{'params': pmap.parameters()}])
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=0.1, patience=0, verbose=True)
-        # self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O1")
+        self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O1")
 
     def _init_TPS(self):
         self.tps_transform = TPS_Twice(self.config.tps_control_pts, self.config.tps_variance, self.config.max_rot)
@@ -99,10 +99,9 @@ class Trainer(object):
             x1, _, x2, loss_mask = self.tps_transform(image)
             recovered_x2, _ = self.model(x1, x2)
             loss = self.metric(recovered_x2, x2, loss_mask)
-            # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-            #     scaled_
-            loss.backward()
-            #clip_grad_norm_(self.model.parameters(), 1)
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
             cur_loss += float(loss)
             if len(log_loss) > 20:
                 log_loss.pop(0)
@@ -119,20 +118,21 @@ class Trainer(object):
     def eval(self, epoch):
         cur_loss = 0
         log_loss = []
-        self.model.eval()
-        batch = tqdm(self.test_loader, total=len(self.test_loader), position=0, leave=True, ascii=True)
-        for i, sample in enumerate(batch):
-            image = sample['image'].to(self.config.device)  # BxCxHxW
-            x1, _, x2, loss_mask = self.tps_transform(image)
-            recovered_x2, _ = self.model(x1, x2)
-            loss = self.metric(recovered_x2, x2, loss_mask)
-            cur_loss += float(loss)
-            if len(log_loss) > 20:
-                log_loss.pop(0)
-            log_loss.append(loss.item())
-            self.writer.add_scalar('Test_loss', loss.item(), global_step=self.test_step)
-            self.test_step += 1
-            batch.set_description(f'Iters: {i + 1} Eval Loss: {stats.mean(log_loss)}')
+        # self.model.eval()
+        with torch.no_grad():
+            batch = tqdm(self.test_loader, total=len(self.test_loader), position=0, leave=True, ascii=True)
+            for i, sample in enumerate(batch):
+                image = sample['image'].to(self.config.device)  # BxCxHxW
+                x1, _, x2, loss_mask = self.tps_transform(image)
+                recovered_x2, _ = self.model(x1, x2)
+                loss = self.metric(recovered_x2, x2, loss_mask)
+                cur_loss += float(loss)
+                if len(log_loss) > 20:
+                    log_loss.pop(0)
+                log_loss.append(loss.item())
+                self.writer.add_scalar('Test_loss', loss.item(), global_step=self.test_step)
+                self.test_step += 1
+                batch.set_description(f'Iters: {i + 1} Eval Loss: {stats.mean(log_loss)}')
         print(f'--- Minimum Eval Loss: {self.eval_loss} --- Epoch {epoch + 1} Loss: {cur_loss} ---')
         if self.eval_loss > cur_loss:
             self.eval_loss = cur_loss

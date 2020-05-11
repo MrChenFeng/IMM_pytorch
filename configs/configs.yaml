@@ -1,9 +1,9 @@
 num_keypoints: 10
-batch_size: 50
+batch_size: 20
 dataset: 'CelebA'
 tps_control_pts: 5
 lr: 0.0001
-epochs: 5
+epochs: 20
 heatmap_std: 0.1
 tps_variance: 0.05
 max_rot: 0.1
@@ -12,6 +12,6 @@ data_rescale_width: 128
 split: 'random'
 trainratio: 0.99
 testratio: 0.01
-pretrained: '/home/chen/Projects/IMM_pytorch/experiment1/model_CelebA.pt'
-run_id: 'experiment2'
+#pretrained: '/home/chen/Projects/IMM_pytorch/experiment4/eval_best_model_CelebA.pt'
+run_id: 'experiment5'
 
