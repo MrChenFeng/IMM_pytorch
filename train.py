@@ -78,8 +78,8 @@ class Trainer(object):
 
     def _load_model(self):
         self.model = IMM(dim=self.config.num_keypoints, heatmap_std=self.config.heatmap_std).to(self.config.device)
-        # if self.config.pretrained is not None:
-        #     self.model.load_state_dict(torch.load(self.config.pretrained))
+        if self.config.pretrained is not None:
+            self.model.load_state_dict(torch.load(self.config.pretrained))
         self.optimizer = Adam([{'params': self.model.parameters(), 'lr': self.config.lr}])  # , {'params': hmap.parameters()},{'params': pmap.parameters()}])
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=0.1, patience=0, verbose=True)
         # self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O1")
@@ -111,6 +111,8 @@ class Trainer(object):
             self.writer.add_scalar('Train_loss', loss.item(), global_step=self.train_step)
             self.train_step += 1
             batch.set_description(f'Iters: {i + 1} Train Loss: {stats.mean(log_loss)}')
+            if i % 1000 == 1:
+                torch.save(self.model.state_dict(), self.config.run_id + f'/checkpoint_model_{self.config.dataset}.pt')
         print(f'--- Epoch {epoch + 1} Train Loss: {cur_loss} ---')
         self.scheduler.step(cur_loss)
 
@@ -134,7 +136,7 @@ class Trainer(object):
         print(f'--- Minimum Eval Loss: {self.eval_loss} --- Epoch {epoch + 1} Loss: {cur_loss} ---')
         if self.eval_loss > cur_loss:
             self.eval_loss = cur_loss
-            torch.save(self.model.state_dict(), self.config.run_id + f'/model_{self.config.dataset}.pt')
+            torch.save(self.model.state_dict(), self.config.run_id + f'/eval_best_model_{self.config.dataset}.pt')
 
 
 if __name__ == '__main__':

@@ -144,8 +144,8 @@ class Generator(nn.Module):
     def forward(self, x):
         for layer in self.conv_layers:
             x = layer(x)
-        return x
-        #return (nn.functional.tanh(x)+1)/2.0
+        #return x
+        return (nn.functional.tanh(x)+1)/2.0
 
     @staticmethod
     def _gen_conv_block(inc, outc, size, stride, padding):
