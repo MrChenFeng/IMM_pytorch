@@ -16,21 +16,21 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 if __name__ == '__main__':
-    model = IMM(dim=10, heatmap_std=0.1, h_channel=32)
-    model.load_state_dict(torch.load('experiment4/eval_best_model_CelebA.pt'))
+    model = IMM(dim=10, heatmap_std=0.1, h_channel=64)
+    model.load_state_dict(torch.load('experiment5/eval_best_model_CelebA.pt'))
     model.eval()
 
     data_set = CelebA(transform=Compose(
         [Rescale([128, 128]), ToTensor()]))
-    trainset, testset = data_set(100000, 10000)
+    trainset, testset = data_set(190000, 1100)
     data_loader = DataLoader(dataset=trainset, batch_size=10, drop_last=True,
                              shuffle=True)
 
     sample = next(iter(data_loader))
-    tps_transform = TPS_Twice(5, 0.05)
+    tps_transform = TPS_Twice(5, 0.05, 0.1)
     image = sample['image']
     x1, mask1, x2, mask2 = tps_transform(image)
-    recovered_x2, _ = model(x1, x1)
+    recovered_x2, _ = model(x2, x1)
 
     plt.subplot(1, 3, 1)
     plt.imshow(x1[1].permute(1, 2, 0).detach().numpy())
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         return torch.mean(loss)
 
 
-    l2_reconstruction_loss(x2, recovered_x2, mask2)
+    print(l2_reconstruction_loss(x2, recovered_x2, mask2))
     pose, cord = model.pose_encoder(x1)
     plt.figure(figsize=(20, 5))
     for i in range(10):

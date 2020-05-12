@@ -10,8 +10,8 @@ max_rot: 0.1
 data_rescale_height: 128
 data_rescale_width: 128
 split: 'random'
-trainratio: 0.99
-testratio: 0.01
-#pretrained: '/home/chen/Projects/IMM_pytorch/experiment4/eval_best_model_CelebA.pt'
-run_id: 'experiment5'
+trainratio: 0.5
+testratio: 0.05
+#pretrained: '/home/chen/Projects/IMM_pytorch/experiment5/eval_best_model_CelebA.pt'
+run_id: 'Celeba_experiment1'
 

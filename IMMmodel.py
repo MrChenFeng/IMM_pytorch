@@ -5,15 +5,15 @@ from utils import get_gaussian_mean
 
 
 class IMM(nn.Module):
-    def __init__(self, dim=10, heatmap_std=0.1, h_channel=64):
+    def __init__(self, dim=10, heatmap_std=0.1, in_channel=3, h_channel=64):
         """
         It should be noted all params has been fixed to Jakab 2018 paper.
         Goto the original class if params and layers need to be changed.
         Images should be rescaled to 128*128
         """
         super(IMM, self).__init__()
-        self.content_encoder = Encoder(h_channel)
-        self.pose_encoder = PoseEncoder(dim, heatmap_std,h_channel)
+        self.content_encoder = Encoder(in_channel, h_channel)
+        self.pose_encoder = PoseEncoder(dim, heatmap_std, in_channel, h_channel)
         self.generator = Generator(h_channel=h_channel)
         self._initialize_weights()
 
@@ -39,9 +39,9 @@ class IMM(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, h_channel=64):
+    def __init__(self, in_channel=3, h_channel=64):
         super(Encoder, self).__init__()
-        self.conv1_1 = self._gen_conv_block(3, h_channel, (7, 7), 1, (3, 3))
+        self.conv1_1 = self._gen_conv_block(in_channel, h_channel, (7, 7), 1, (3, 3))
         self.conv1_2 = self._gen_conv_block(h_channel, h_channel, (3, 3), 1, (1, 1))
 
         self.conv2_1 = self._gen_conv_block(h_channel, 2 * h_channel, (3, 3), 2, (1, 1))
@@ -81,13 +81,13 @@ class Encoder(nn.Module):
 
 
 class PoseEncoder(Encoder):
-    def __init__(self, dim=10, heatmap_std=0.1, h_channel=64, heatmap_size=16):
+    def __init__(self, dim=10, heatmap_std=0.1, in_channel=3, h_channel=64, heatmap_size=16):
         """
 
         Args:
             dim (int): Num of keypoints
         """
-        super(PoseEncoder, self).__init__(h_channel)
+        super(PoseEncoder, self).__init__(in_channel, h_channel)
         self.final_conv = nn.Conv2d(h_channel, dim, (3, 3), 1, (1, 1))
         self.heatmap = HeatMap(heatmap_std, (heatmap_size, heatmap_size))
 
@@ -108,17 +108,17 @@ class Generator(nn.Module):
         self.conv1_2 = self._gen_conv_block(8 * h_channel, 8 * h_channel, (3, 3), 1, (1, 1))
 
         map_size = [2 * s for s in map_size]
-        self.upsample1 = nn.Upsample(map_size)
+        self.upsample1 = nn.Upsample(map_size, mode='bilinear')
         self.conv2_1 = self._gen_conv_block(8 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
         self.conv2_2 = self._gen_conv_block(4 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
 
         map_size = [2 * s for s in map_size]
-        self.upsample2 = nn.Upsample(map_size)
+        self.upsample2 = nn.Upsample(map_size, mode='bilinear')
         self.conv3_1 = self._gen_conv_block(4 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
         self.conv3_2 = self._gen_conv_block(2 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
 
         map_size = [2 * s for s in map_size]
-        self.upsample3 = nn.Upsample(map_size)
+        self.upsample3 = nn.Upsample(map_size, mode='bilinear')
         self.conv4_1 = self._gen_conv_block(2 * h_channel, h_channel, (3, 3), 1, (1, 1))
         self.conv4_2 = self._gen_conv_block(h_channel, h_channel, (3, 3), 1, (1, 1))
 
@@ -142,7 +142,8 @@ class Generator(nn.Module):
         for layer in self.conv_layers:
             x = layer(x)
         # return x
-        return nn.functional.leaky_relu(x)  # + 1) / 2.0
+        #return (nn.functional.tanh(x) + 1) / 2.0
+        return nn.functional.leaky_relu(x)
 
     @staticmethod
     def _gen_conv_block(inc, outc, size, stride, padding):

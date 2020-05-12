@@ -5,9 +5,10 @@ import warnings
 import torch
 from apex import amp
 from torch.optim import Adam, lr_scheduler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.transforms import Compose
+from torchvision.datasets import FashionMNIST, MNIST
+from torchvision.transforms import Compose  # , Resize, ToTensor
 from tqdm import tqdm
 
 from IMMmodel import IMM
@@ -37,13 +38,19 @@ class Trainer(object):
 
         if self.config.dataset == 'AFLW':
             self.dataset = AFLW
+            self._load_list_split()
         elif self.config.dataset == 'CelebA':
             self.dataset = CelebA
-
-        if self.config.split == 'listed':
-            self._load_list_split()
-        elif self.config.split == 'random':
             self._load_random_split()
+        elif self.config.dataset == 'MNIST':
+            self.dataset = MNIST
+            self._load_mnist()
+        elif self.config.dataset == 'FashionMNIST':
+            self.dataset = FashionMNIST
+            self._load_mnist()
+        # if self.config.split == 'listed':
+
+        # elif self.config.split == 'random':
 
         self.train_step = 0
         self.test_step = 0
@@ -55,6 +62,21 @@ class Trainer(object):
         self.metric = l2_reconstruction_loss
         self.eval_loss = float("inf")
 
+    def _load_mnist(self):
+        train_set = self.dataset(self.config.dataset, train=True, transform=Compose(
+            [Resize([self.config.data_rescale_height, self.config.data_rescale_width]), ToTensor()]),
+                          target_transform=None, download=True)
+        idx = torch.where(train_set.train_labels == 6)
+        train_set = Subset(train_set, idx[0])
+        test_set = self.dataset(self.config.dataset, train=False, transform=Compose(
+            [Resize([self.config.data_rescale_height, self.config.data_rescale_width]), ToTensor()]),
+                         target_transform=None, download=True)
+        idx = torch.where(test_set.test_labels == 6)
+        test_set = Subset(test_set, idx[0])
+        self.train_loader = DataLoader(dataset=train_set, batch_size=self.config.batch_size, drop_last=True,
+                                       shuffle=True)
+        self.test_loader = DataLoader(dataset=test_set, batch_size=self.config.batch_size, drop_last=True,
+                                      shuffle=True)
     def _load_list_split(self):
         train_set = self.dataset(is_train=True, transform=Compose(
             [Rescale([self.config.data_rescale_height, self.config.data_rescale_width]), ToTensor()]))
@@ -77,10 +99,11 @@ class Trainer(object):
                                       shuffle=True)
 
     def _load_model(self):
-        self.model = IMM(dim=self.config.num_keypoints, heatmap_std=self.config.heatmap_std).to(self.config.device)
+        self.model = IMM(dim=self.config.num_keypoints, heatmap_std=self.config.heatmap_std, in_channel=3).to(self.config.device)
         if self.config.pretrained is not None:
             self.model.load_state_dict(torch.load(self.config.pretrained))
-        self.optimizer = Adam([{'params': self.model.parameters(), 'lr': self.config.lr}])  # , {'params': hmap.parameters()},{'params': pmap.parameters()}])
+        self.optimizer = Adam([{'params': self.model.parameters(),
+                                'lr': self.config.lr}])  # , {'params': hmap.parameters()},{'params': pmap.parameters()}])
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=0.1, patience=0, verbose=True)
         self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O1")
 
@@ -118,7 +141,7 @@ class Trainer(object):
     def eval(self, epoch):
         cur_loss = 0
         log_loss = []
-        # self.model.eval()
+        self.model.eval()
         with torch.no_grad():
             batch = tqdm(self.test_loader, total=len(self.test_loader), position=0, leave=True, ascii=True)
             for i, sample in enumerate(batch):
