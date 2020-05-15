@@ -12,6 +12,7 @@ from torchvision.transforms import Compose  # , Resize, ToTensor
 from tqdm import tqdm
 
 from IMMmodel import IMM
+# from DuaneModel import IMM
 from configs.config import config
 from datasets import AFLW
 from datasets import CelebA
@@ -110,6 +111,8 @@ class Trainer(object):
     def _init_TPS(self):
         self.tps_transform = TPS_Twice(self.config.tps_control_pts, self.config.tps_variance, self.config.max_rot)
 
+    def logging(self, step):
+        pass
     def train(self, epoch):
         cur_loss = 0
         self.model.train()
@@ -131,6 +134,7 @@ class Trainer(object):
             log_loss.append(loss.item())
             self.optimizer.step()
             self.writer.add_scalar('Train_loss', loss.item(), global_step=self.train_step)
+            # self.writer.add_image('Train_loss', loss.item(), global_step=self.train_step)
             self.train_step += 1
             batch.set_description(f'Iters: {i + 1} Train Loss: {stats.mean(log_loss)}')
             if i % 1000 == 1:
@@ -141,7 +145,7 @@ class Trainer(object):
     def eval(self, epoch):
         cur_loss = 0
         log_loss = []
-        self.model.eval()
+        #self.model.eval()
         with torch.no_grad():
             batch = tqdm(self.test_loader, total=len(self.test_loader), position=0, leave=True, ascii=True)
             for i, sample in enumerate(batch):

@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, Subset
 class Base(Dataset):
     """CelebA dataset."""
 
-    def __init__(self, root_dir='/home/lab/datasets/CelebA/Img/img_align_celeba', transform=None):
+    def __init__(self, root_dir='/home/chen/Datasets/celeba/Img/img_align_celeba_hq', transform=None):
         """
         Args:
             root_dir (string):       Directory with all the images.

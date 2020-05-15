@@ -173,7 +173,7 @@ def nop(*data):
 
 
 class TPS_Twice(object):
-    def __init__(self, num_control=5, tps_variance=0.05, rotate_variance=0.1):
+    def __init__(self, num_control=5, tps_variance=0.05, rotate_variance=0.05):
         """
 
         Args:
@@ -194,8 +194,8 @@ class TPS_Twice(object):
 
         theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize, self.tps_cntl_pts, self.tps_variance,
                                                                self.max_rotate)
-        x2 = peturb(x1, theta_tps, cntl_pts, theta_rotate)
-        mask2 = peturb(mask1, theta_tps, cntl_pts, theta_rotate)
+        x2 = peturb(x, theta_tps, cntl_pts, theta_rotate)
+        mask2 = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
         return x1, mask1, x2, mask2
 
 

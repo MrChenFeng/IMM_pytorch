@@ -5,16 +5,16 @@ from utils import get_gaussian_mean
 
 
 class IMM(nn.Module):
-    def __init__(self, dim=10, heatmap_std=0.1, in_channel=3, h_channel=64):
+    def __init__(self, dim=10, heatmap_std=0.1, in_channel=3, h_channel=32):
         """
         It should be noted all params has been fixed to Jakab 2018 paper.
         Goto the original class if params and layers need to be changed.
         Images should be rescaled to 128*128
         """
         super(IMM, self).__init__()
-        self.content_encoder = Encoder(in_channel, h_channel)
+        self.content_encoder = ContentEncoder(in_channel, h_channel)
         self.pose_encoder = PoseEncoder(dim, heatmap_std, in_channel, h_channel)
-        self.generator = Generator(h_channel=h_channel)
+        self.generator = Generator(channels=8*h_channel+dim, h_channel=h_channel)
         self._initialize_weights()
 
     def _initialize_weights(self):
@@ -38,22 +38,61 @@ class IMM(nn.Module):
         return recovered_y, pose_coord
 
 
-class Encoder(nn.Module):
+class ContentEncoder(nn.Module):
     def __init__(self, in_channel=3, h_channel=64):
-        super(Encoder, self).__init__()
-        self.conv1_1 = self._gen_conv_block(in_channel, h_channel, (7, 7), 1, (3, 3))
-        self.conv1_2 = self._gen_conv_block(h_channel, h_channel, (3, 3), 1, (1, 1))
+        super(ContentEncoder, self).__init__()
+        self.conv1_1 = Conv_Block(in_channel, h_channel, (3, 3))
+        self.conv1_2 = Conv_Block(h_channel, h_channel, (3, 3))
 
-        self.conv2_1 = self._gen_conv_block(h_channel, 2 * h_channel, (3, 3), 2, (1, 1))
-        self.conv2_2 = self._gen_conv_block(2 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
+        self.conv2_1 = Conv_Block(h_channel, 2 * h_channel, (3, 3), downsample=True)
+        self.conv2_2 = Conv_Block(2 * h_channel, 2 * h_channel, (3, 3))
 
-        self.conv3_1 = self._gen_conv_block(2 * h_channel, 4 * h_channel, (3, 3), 2, (1, 1))
-        self.conv3_2 = self._gen_conv_block(4 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
+        self.conv3_1 = Conv_Block(2 * h_channel, 4 * h_channel, (3, 3), downsample=True)
+        self.conv3_2 = Conv_Block(4 * h_channel, 4 * h_channel, (3, 3))
 
-        self.conv4_1 = self._gen_conv_block(4 * h_channel, 8 * h_channel, (3, 3), 2, (1, 1))
-        self.conv4_2 = self._gen_conv_block(8 * h_channel, 8 * h_channel, (3, 3), 1, (1, 1))
+        self.conv4_1 = Conv_Block(4 * h_channel, 8 * h_channel, (3, 3), downsample=True)
+        self.conv4_2 = Conv_Block(8 * h_channel, 8 * h_channel, (3, 3))
 
-        self.out_conv = self._gen_conv_block(8 * h_channel, h_channel, (3, 3), 1, (1, 1))
+        # self.out_conv = Conv_Block(8 * h_channel, h_channel, (3, 3))
+        self.conv_layers = nn.ModuleList([
+            self.conv1_1,
+            self.conv1_2,
+            self.conv2_1,
+            self.conv2_2,
+            self.conv3_1,
+            self.conv3_2,
+            self.conv4_1,
+            self.conv4_2
+            # self.out_conv
+        ])
+
+    def forward(self, x):
+        for layer in self.conv_layers:
+            x = layer(x)
+        return x
+
+
+class PoseEncoder(nn.Module):
+    def __init__(self, dim=10, heatmap_std=0.1, in_channel=3, h_channel=64, heatmap_size=16):
+        """
+
+        Args:
+            dim (int): Num of keypoints
+        """
+        super(PoseEncoder, self).__init__()
+        self.conv1_1 = Conv_Block(in_channel, h_channel, (3, 3))
+        self.conv1_2 = Conv_Block(h_channel, h_channel, (3, 3))
+
+        self.conv2_1 = Conv_Block(h_channel, 2 * h_channel, (3, 3), downsample=True)
+        self.conv2_2 = Conv_Block(2 * h_channel, 2 * h_channel, (3, 3))
+
+        self.conv3_1 = Conv_Block(2 * h_channel, 4 * h_channel, (3, 3), downsample=True)
+        self.conv3_2 = Conv_Block(4 * h_channel, 4 * h_channel, (3, 3))
+
+        self.conv4_1 = Conv_Block(4 * h_channel, 8 * h_channel, (3, 3), downsample=True)
+        self.conv4_2 = Conv_Block(8 * h_channel, 8 * h_channel, (3, 3))
+
+        self.out_conv = nn.Sequential(nn.Conv2d(8 * h_channel, dim, (1, 1)))
         self.conv_layers = nn.ModuleList([
             self.conv1_1,
             self.conv1_2,
@@ -65,36 +104,11 @@ class Encoder(nn.Module):
             self.conv4_2,
             self.out_conv
         ])
-
-    def forward(self, x):
-        for layer in self.conv_layers:
-            x = layer(x)
-        return x
-
-    @staticmethod
-    def _gen_conv_block(inc, outc, size, stride, padding):
-        return nn.Sequential(
-            nn.Conv2d(in_channels=inc, out_channels=outc, kernel_size=size, stride=stride, padding=padding),
-            nn.BatchNorm2d(outc),
-            nn.LeakyReLU()
-        )
-
-
-class PoseEncoder(Encoder):
-    def __init__(self, dim=10, heatmap_std=0.1, in_channel=3, h_channel=64, heatmap_size=16):
-        """
-
-        Args:
-            dim (int): Num of keypoints
-        """
-        super(PoseEncoder, self).__init__(in_channel, h_channel)
-        self.final_conv = nn.Conv2d(h_channel, dim, (3, 3), 1, (1, 1))
         self.heatmap = HeatMap(heatmap_std, (heatmap_size, heatmap_size))
 
     def forward(self, x):
         for layer in self.conv_layers:
             x = layer(x)
-        x = nn.functional.leaky_relu(self.final_conv(x))
         heatmap, coord = self.heatmap(x)
         return heatmap, coord
 
@@ -102,37 +116,28 @@ class PoseEncoder(Encoder):
 class Generator(nn.Module):
     """"""
 
-    def __init__(self, map_size=[16, 16], channels=64 + 10, h_channel=64):
+    def __init__(self, channels=64 + 10, h_channel=64):
         super(Generator, self).__init__()
-        self.conv1_1 = self._gen_conv_block(channels, 8 * h_channel, (3, 3), 1, (1, 1))
-        self.conv1_2 = self._gen_conv_block(8 * h_channel, 8 * h_channel, (3, 3), 1, (1, 1))
+        self.conv1_1 = Conv_Block(channels, 8 * h_channel, (3, 3))
+        self.conv1_2 = Conv_Block(8 * h_channel, 8 * h_channel, (3, 3), upsample=True)
 
-        map_size = [2 * s for s in map_size]
-        self.upsample1 = nn.Upsample(map_size, mode='bilinear')
-        self.conv2_1 = self._gen_conv_block(8 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
-        self.conv2_2 = self._gen_conv_block(4 * h_channel, 4 * h_channel, (3, 3), 1, (1, 1))
+        self.conv2_1 = Conv_Block(8 * h_channel, 4 * h_channel, (3, 3))
+        self.conv2_2 = Conv_Block(4 * h_channel, 4 * h_channel, (3, 3), upsample=True)
 
-        map_size = [2 * s for s in map_size]
-        self.upsample2 = nn.Upsample(map_size, mode='bilinear')
-        self.conv3_1 = self._gen_conv_block(4 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
-        self.conv3_2 = self._gen_conv_block(2 * h_channel, 2 * h_channel, (3, 3), 1, (1, 1))
+        self.conv3_1 = Conv_Block(4 * h_channel, 2 * h_channel, (3, 3))
+        self.conv3_2 = Conv_Block(2 * h_channel, 2 * h_channel, (3, 3), upsample=True)
 
-        map_size = [2 * s for s in map_size]
-        self.upsample3 = nn.Upsample(map_size, mode='bilinear')
-        self.conv4_1 = self._gen_conv_block(2 * h_channel, h_channel, (3, 3), 1, (1, 1))
-        self.conv4_2 = self._gen_conv_block(h_channel, h_channel, (3, 3), 1, (1, 1))
+        self.conv4_1 = Conv_Block(2 * h_channel, h_channel, (3, 3))
+        self.conv4_2 = Conv_Block(h_channel, h_channel, (3, 3))
 
-        self.final_conv = nn.Conv2d(h_channel, 3, (3, 3), 1, (1, 1))
+        self.final_conv = nn.Conv2d(h_channel, 3, (3, 3), padding=[1, 1])
         self.conv_layers = nn.ModuleList([
             self.conv1_1,
             self.conv1_2,
-            self.upsample1,
             self.conv2_1,
             self.conv2_2,
-            self.upsample2,
             self.conv3_1,
             self.conv3_2,
-            self.upsample3,
             self.conv4_1,
             self.conv4_2,
             self.final_conv
@@ -143,15 +148,7 @@ class Generator(nn.Module):
             x = layer(x)
         # return x
         #return (nn.functional.tanh(x) + 1) / 2.0
-        return nn.functional.leaky_relu(x)
-
-    @staticmethod
-    def _gen_conv_block(inc, outc, size, stride, padding):
-        return nn.Sequential(
-            nn.Conv2d(in_channels=inc, out_channels=outc, kernel_size=size, stride=stride, padding=padding),
-            nn.BatchNorm2d(outc),
-            nn.LeakyReLU()
-        )
+        return nn.functional.relu(x)
 
 
 class HeatMap(nn.Module):
@@ -193,8 +190,27 @@ class HeatMap(nn.Module):
 
         dist = (x_ind - x_mean) ** 2 + (y_ind - y_mean) ** 2
 
-        res = torch.exp(-(dist + 1e-6).sqrt_() / 2 * self.std ** 2)
+        res = torch.exp(-(dist + 1e-6).sqrt_() / (2 * self.std ** 2))
         return res, coord
+
+
+class Conv_Block(nn.Module):
+    def __init__(self, inc, outc, size, downsample=False, upsample=False):
+        super(Conv_Block, self).__init__()
+        block = [
+            nn.ReplicationPad2d(1),
+            nn.Conv2d(in_channels=inc, out_channels=outc, kernel_size=size),
+            nn.BatchNorm2d(outc),
+            nn.LeakyReLU()
+        ]
+        if downsample:
+            block += [nn.MaxPool2d(kernel_size=2, stride=2)]
+        if upsample:
+            block += [nn.UpsamplingBilinear2d(scale_factor=2)]
+        self.block = nn.Sequential(*block)
+
+    def forward(self, x):
+        return self.block(x)
 
 
 if __name__ == '__main__':
